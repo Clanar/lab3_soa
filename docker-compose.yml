@@ -1,0 +1,85 @@
+services:
+  postgres-db:
+    image: postgres:14-alpine
+    container_name: postgres-db
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ride_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  gateway:
+    build: ./gateway
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - user-service
+      - analytics-service
+      - ride-tracking-service
+
+  user-service:
+    build: ./user-service
+    container_name: user-service
+    environment:
+      - PORT=8081
+    ports:
+      - "8081:8081"
+
+  ride-tracking-service:
+    build: ./ride-tracking-service
+    container_name: ride-tracking-service
+    environment:
+      - PORT=8082
+      - USER_SERVICE_URL=http://user-service:8081
+      - RABBIT_URL=amqp://guest:guest@rabbit:5672/
+      - DB_SOURCE=postgresql://user:password@postgres-db:5432/ride_db?sslmode=disable
+    ports:
+      - "8082:8082"
+    depends_on:
+      - rabbitmq
+      - user-service
+      - postgres-db
+
+  social-service:
+    build: ./social-service
+    container_name: social-service
+    environment:
+      - PORT=8083
+      - RABBIT_URL=amqp://guest:guest@rabbit:5672/
+    ports:
+      - "8083:8083"
+    depends_on:
+      - rabbitmq
+
+  analytics-service:
+    build: ./analytics-service
+    environment:
+      - PORT=8084
+      - RABBIT_URL=amqp://guest:guest@rabbit:5672/
+    ports:
+      - "8084-8086:8084"
+
+    depends_on:
+      - rabbitmq
+
+  route-planning-service:
+    build: ./route-planning-service
+    container_name: route-planning-service
+    environment:
+      - PORT=8087
+    ports:
+      - "8087:8087"
+
+volumes:
+  pgdata:
